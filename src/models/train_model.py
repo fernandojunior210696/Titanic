@@ -9,12 +9,17 @@ from sklearn.preprocessing import OneHotEncoder # enconding cat variables
 from sklearn.decomposition import PCA, TruncatedSVD # Principal Components Analysis
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA # Linear Discriminant Analysis
 from sklearn.linear_model import LogisticRegression
-from joblib import dump, load
+from joblib import dump
+import logging
+
+logging.getLogger().setLevel(logging.INFO)
 
 # Read configs from yaml config file
+logging.info('***** Reading configurations *****')
 config = load_config('src/config/', 'my_config.yaml')
 
 # Load train and test data
+logging.info('***** Loading training data *****')
 df = pd.read_csv(os.path.join(config["data_directory"], config["train_data_name"]))
 submission_df = pd.read_csv(os.path.join(config["data_directory"], config["test_data_name"]))
 
@@ -47,8 +52,10 @@ ml_classifier = ('logreg', LogisticRegression(n_jobs=config["n_jobs"], random_st
 classifier = Pipeline(steps=[feature_engineering_step,ml_classifier])
 
 # Train classifier
+logging.info('***** Training Model *****')
 classifier.fit(X_train, y_train)
 
 # Save fitted model
+logging.info('***** Dumping Trained Model *****')
 model_path = os.path.join(config["artifact_path"], config["model_name"])
 dump(classifier, model_path) 
