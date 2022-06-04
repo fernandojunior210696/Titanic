@@ -2,5 +2,4 @@ venv*
 dist*
 *egg-info*
 __pycache__
-artifacts*
 .ipynb_checkpoints
