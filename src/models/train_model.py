@@ -58,4 +58,4 @@ classifier.fit(X_train, y_train)
 # Save fitted model
 logging.info('***** Dumping Trained Model *****')
 model_path = os.path.join(config["artifact_path"], config["model_name"])
-dump(classifier, model_path) 
+dump(classifier, model_path)
