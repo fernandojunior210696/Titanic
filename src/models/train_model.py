@@ -15,7 +15,6 @@ config = load_config('src/config/', 'my_config.yaml')
 # Load train and test data
 logging.info('***** Loading training data *****')
 df = pd.read_csv(os.path.join(config["data_directory"], config["train_data_name"]))
-submission_df = pd.read_csv(os.path.join(config["data_directory"], config["test_data_name"]))
 
 # Split data in train and test
 X_train, X_test, y_train, y_test = train_test_split(df.drop('Survived', axis = 1), 
@@ -25,7 +24,7 @@ X_train, X_test, y_train, y_test = train_test_split(df.drop('Survived', axis = 1
 
 feature_engineering_step, space = experiments_arg(X_train)
 # Run experiments
-run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineering_step, space)
+classifier = run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineering_step, space)
 
 # # Models to experiment
 # models = [('Logistic Regression', classifier, logreg_grid)]
@@ -35,7 +34,7 @@ run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineering_s
 # final_score = train_final_score.groupby(['model']).mean().round(3).reset_index()
 # print(final_score)
 
-# # Save fitted model
-# logging.info('***** Dumping Trained Model *****')
-# model_path = os.path.join(config["artifact_path"], config["model_name"])
-# dump(classifier, model_path)
+# Save fitted model
+logging.info('***** Dumping Trained Model *****')
+model_path = os.path.join(config["artifact_path"], config["model_name"])
+dump(classifier, model_path)
