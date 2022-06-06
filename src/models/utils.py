@@ -16,6 +16,13 @@ from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.model_selection import cross_validate, cross_val_score
 from sklearn.metrics import confusion_matrix, classification_report, roc_curve, make_scorer
 
+from kaggle.api.kaggle_api_extended import KaggleApi
+def submite_to_competition(submition_path, message, competition_name):
+    api = KaggleApi()
+    api.authenticate()
+    api.competition_submit(submition_path, message=message, competition=competition_name)
+
+
 # Function to load yaml configuration file
 def load_config(config_path, config_name):
     with open(os.path.join(config_path, config_name)) as file:
@@ -238,6 +245,8 @@ def run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineeri
         str(model).split('(')[0])
     print('\n', classification_report(y_train, y_pred_train))
     print('\n', classification_report(y_test, y_pred_test))
+
+    return model
 
 
 def run_exps_random_search(models, X_train, y_train, pararell_threads):

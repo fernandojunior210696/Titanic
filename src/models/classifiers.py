@@ -44,7 +44,8 @@ def experiments_arg(X_train):
         ('features_preprocessor', features_imputer_step),
         ('preprocessing', PreProcessingData(columnsNames = col_features)),
         ('hot_encoder', features_encoder_step),
-        ('dimensionality_reduction', TruncatedSVD())])
+        ('dimensionality_reduction', TruncatedSVD())
+        ])
 
     feature_engineering_step = ('feature_engineering', feature_engineering_pipeline)
 

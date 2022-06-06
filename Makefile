@@ -14,6 +14,10 @@ dataset:
 train:
 	python3 src/models/train_model.py
 
+## Submit results
+submit:
+	python3 src/models/predict_model.py
+
 ## Setup
 setup:
 	pip install -r requirements.txt
