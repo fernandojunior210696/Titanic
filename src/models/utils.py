@@ -14,6 +14,7 @@ from hyperopt import hp, fmin, tpe, Trials, space_eval, STATUS_OK
 from hyperopt.pyll.base import scope
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.model_selection import cross_validate, cross_val_score
+from sklearn.preprocessing import QuantileTransformer
 from sklearn.metrics import confusion_matrix, classification_report, roc_curve, make_scorer
 
 from kaggle.api.kaggle_api_extended import KaggleApi
@@ -130,7 +131,8 @@ def features_imputer(df, numerical_imputer_method, categorical_imputer_method):
     # Numeric features
     num_features = list(df.select_dtypes(include=['int64', 'float64']).columns)
     numerical_imputer = Pipeline(steps=[
-        ('imputer', numerical_imputer_method)])
+        ('imputer', numerical_imputer_method)
+        ])
 
     # Categorical features
     cat_features = list(df.select_dtypes(include=['object', 'category']).columns)
@@ -199,9 +201,10 @@ def run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineeri
         ])
 
         # parameters from pipeline
+        print(args['params'])
         model.set_params(**args['params']['hyper_param_groups'])
 
-        score = cross_val_score(model, X_train, y_train, scoring='f1_weighted' , cv=5, n_jobs=-1, error_score=0)
+        score = cross_val_score(model, X_train, y_train, scoring='accuracy', cv=5, n_jobs=-1, error_score='raise')
         print(f'Model Name: {args["model"]}: ', score)
 
         # return the negative mean of the eval metric
@@ -217,7 +220,7 @@ def run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineeri
     best = fmin(objective,
                 space,
                 algo=tpe.suggest,
-                max_evals=100,
+                max_evals=300,
                 trials=trials)
         
     # Get the values of the optimal parameters
@@ -233,18 +236,36 @@ def run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineeri
 
     model.set_params(**best_params['params']['hyper_param_groups'])
 
-    # Fit the model with the optimal hyperparamters
-    model.fit(X_train, y_train)
+    # Create mlflow experiment with model name
+    name = "Hyperopt"
+    experiment_id = create_mlflow_experiment(name)
 
-    # Predicting with the best model
-    y_pred_train = model.predict(X_train)
-    y_pred_test = model.predict(X_test)
+    with mlflow.start_run(run_name = name, experiment_id=experiment_id):
+        logging.info('Fitting best model from Hyperopt')
 
-    # Classification Report 
-    print('Training Classification Report for estimator: ',
-        str(model).split('(')[0])
-    print('\n', classification_report(y_train, y_pred_train))
-    print('\n', classification_report(y_test, y_pred_test))
+        # Fit the model with the optimal hyperparamters
+        model.fit(X_train, y_train)
+
+        # Predicting with the best model
+        y_pred_train = model.predict(X_train)
+        y_pred_test = model.predict(X_test)
+
+        # Get metrics
+        y_true = y_train
+        y_pred = y_pred_train
+        run_metrics = get_metrics(y_true, y_pred)
+
+        # Log metrics and parameters of experiment
+        mlflow.log_metrics(run_metrics)
+        mlflow.log_params(best_params['params']['hyper_param_groups'])
+
+        # Classification Report 
+        print('Training Classification Report for estimator: ',
+            str(model).split('(')[0])
+        print('\n', classification_report(y_train, y_pred_train))
+        print('\n', classification_report(y_test, y_pred_test))
+
+        mlflow.end_run()
 
     return model
 

@@ -12,9 +12,7 @@ import logging
 # Classification Models
 from sklearn.linear_model import LogisticRegression # Logistic Regression
 from sklearn.neighbors import KNeighborsClassifier # KNN
-from sklearn.svm import SVC # SVM
-from sklearn.ensemble import RandomForestClassifier # RandomForest
-from sklearn.naive_bayes import GaussianNB # Naive Bayes
+from lightgbm import LGBMClassifier 
 from xgboost import XGBClassifier # Xgboost
 
 # Tunning bayesian optimization
@@ -60,21 +58,21 @@ def experiments_arg(X_train):
                 'model__penalty':hp.choice('penalty_block1', ['l2']),
                 'model__fit_intercept': hp.choice('fit_intercept_block1', [True, False]),
                 'model__C': hp.lognormal('C_block1', 0, 1.0),
-                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block1', 1, 28, 1))
+                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block1', 1, 23, 1))
                 },
                 {
                 'model__solver': hp.choice('solver_block2', ['liblinear']),
                 'model__penalty':hp.choice('penalty_block2', ['l2']),
                 'model__fit_intercept': hp.choice('fit_intercept_block2', [True, False]),
                 'model__C': hp.lognormal('C_block2', 0, 1.0),
-                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block2', 1, 28, 1))
+                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block2', 1, 23, 1))
                 },
                 {
                 'model__solver': hp.choice('solver_block3', ['saga']),
                 'model__penalty':hp.choice('penalty_block3', ['l1']),
                 'model__fit_intercept': hp.choice('fit_intercept_block3', [True, False]),
                 'model__C': hp.lognormal('C_block3', 0, 1.0),
-                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block3', 1, 28, 1))
+                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block3', 1, 23, 1))
                 },
             ])
         }
@@ -87,22 +85,41 @@ def experiments_arg(X_train):
             [
                 {
                 "model__objective": hp.choice("model__objective", ['binary:logistic', 'binary:logitraw', 'binary:hinge']),
-                "model__learning_rate": hp.loguniform('model__learning_rate', np.log(0.001), np.log(0.3)),
+                "model__learning_rate": hp.quniform('model__learning_rate', 0, 0.05, 0.0001),
                 "model__colsample_bytree": hp.uniform('model__colsample_bytree', 0, 1),
                 "model__colsample_bylevel": hp.uniform('model__colsample_bylevel', 0, 1),
                 "model__colsample_bynode": hp.uniform('model__colsample_bynode', 0, 1),
                 "model__subsample": hp.uniform('model__subsample', 0, 1),
                 "model__max_depth": scope.int(hp.quniform('model__max_depth', 1, 25, 1)),
                 "model__n_estimators": scope.int(hp.quniform('model__n_estimators', 1, 3000, 10)),
-                "model__reg_alpha": hp.uniform('model__reg_alpha', 0, 1),
-                "model__reg_lambda": hp.uniform('model__reg_lambda', 0, 1),
+                "model__reg_alpha": hp.uniform('model__reg_alpha', 0, 5),
+                "model__reg_lambda": hp.uniform('model__reg_lambda', 0, 5),
                 "model__gamma": hp.uniform('model__gamma', 0, 30),
-                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block4', 1, 28, 1))
+                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block4', 1, 23, 1))
                 }
             ])
         }
     },
 
+    {
+        'model':LGBMClassifier(n_jobs=config["n_jobs"]),
+        'params':{
+            'hyper_param_groups' :hp.choice('hyper_param_groups_3', 
+            [
+                {
+                'model__learning_rate': hp.quniform('model__learning_rate_2', 0.0001, 0.05, 0.0001),
+                'model__n_estimators': scope.int(hp.uniform('model__n_estimators_2', 1, 3000)),
+                'model__max_depth':  scope.int(hp.quniform('model__max_depth_2', 1, 25, 1)),
+                'model__num_leaves': hp.choice('model__num_leaves_2', 2*np.arange(20, 2**6, dtype=int)),
+                'model__min_child_weight': hp.quniform('model__min_child_weight_2', 1, 9, 0.025),
+                'model__colsample_bytree':hp.uniform('model__colsample_bytree_2', 0.1, 1),
+                'model__objective': 'binary',
+                'model__boosting_type': 'gbdt',
+                'feature_engineering__dimensionality_reduction__n_components': scope.int(hp.quniform('n_components_block6', 1, 23, 1))
+                }
+            ])
+        }
+    }
     ])
 
     return feature_engineering_step, space
