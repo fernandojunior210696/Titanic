@@ -1,14 +1,8 @@
 import os
 import pandas as pd
-from utils import load_config, PreProcessingData, features_imputer, categorial_features_encoder
+from utils import load_config, run_exps_random_search, run_hyperopt_experiments
+from classifiers import experiments_arg
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer # handle missing values (naive approach)
-from sklearn.impute import KNNImputer # handle missing values (better approach)
-from sklearn.preprocessing import OneHotEncoder # enconding cat variables
-from sklearn.decomposition import PCA, TruncatedSVD # Principal Components Analysis
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA # Linear Discriminant Analysis
-from sklearn.linear_model import LogisticRegression
 from joblib import dump
 import logging
 
@@ -29,33 +23,19 @@ X_train, X_test, y_train, y_test = train_test_split(df.drop('Survived', axis = 1
                                                     test_size=config["test_size"], 
                                                     random_state=config["seed"])
 
-# Imputation step
-numerical_imputer_method = KNNImputer(n_neighbors=4, weights="uniform")
-categorical_imputer_method = SimpleImputer(strategy='most_frequent')
-features_imputer_step, col_features = features_imputer(X_train, numerical_imputer_method, categorical_imputer_method)
+feature_engineering_step, space = experiments_arg(X_train)
+# Run experiments
+run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineering_step, space)
 
-# Categorical encoder step
-categorical_features = ['Pclass', 'Sex', 'Embarked', 'FareClass', 'FamilyClass', 'AgeBand', 'Title']
-categorical_encoder_method = ('onehot', OneHotEncoder(handle_unknown='ignore'))
-features_encoder_step = categorial_features_encoder(categorical_features, categorical_encoder_method)
+# # Models to experiment
+# models = [('Logistic Regression', classifier, logreg_grid)]
 
-# Feature Engineering Pipeline
-feature_engineering_pipeline = Pipeline(steps=[
-    ('features_preprocessor', features_imputer_step),
-    ('preprocessing', PreProcessingData(columnsNames = col_features)),
-    ('hot_encoder', features_encoder_step),
-    ('dimensionality_reduction', TruncatedSVD())])
+# # Run experiments
+# train_final_score = run_exps_random_search(models, X_train, y_train, config["n_jobs"])
+# final_score = train_final_score.groupby(['model']).mean().round(3).reset_index()
+# print(final_score)
 
-# Final Classifier Pipeline
-feature_engineering_step = ('feature_engineering', feature_engineering_pipeline)
-ml_classifier = ('logreg', LogisticRegression(n_jobs=config["n_jobs"], random_state = config["seed"]))
-classifier = Pipeline(steps=[feature_engineering_step,ml_classifier])
-
-# Train classifier
-logging.info('***** Training Model *****')
-classifier.fit(X_train, y_train)
-
-# Save fitted model
-logging.info('***** Dumping Trained Model *****')
-model_path = os.path.join(config["artifact_path"], config["model_name"])
-dump(classifier, model_path)
+# # Save fitted model
+# logging.info('***** Dumping Trained Model *****')
+# model_path = os.path.join(config["artifact_path"], config["model_name"])
+# dump(classifier, model_path)

@@ -4,6 +4,17 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 import pandas as pd
+from sklearn.model_selection import cross_validate
+import logging
+from sklearn.model_selection import RandomizedSearchCV
+import mlflow
+
+# Tunning bayesian optimization
+from hyperopt import hp, fmin, tpe, Trials, space_eval, STATUS_OK
+from hyperopt.pyll.base import scope
+from sklearn.model_selection import StratifiedKFold, KFold
+from sklearn.model_selection import cross_validate, cross_val_score
+from sklearn.metrics import confusion_matrix, classification_report, roc_curve, make_scorer
 
 # Function to load yaml configuration file
 def load_config(config_path, config_name):
@@ -140,4 +151,161 @@ def categorial_features_encoder(categorical_features, categorical_encoder_method
             ('features', categorical_transformer, categorical_features)])
     
     return encoder
+
+# compare various metrics of model
+def get_metrics(y_true, y_pred):
+    from sklearn.metrics import accuracy_score, precision_score, recall_score
+    acc = accuracy_score(y_true, y_pred)
+    prec = precision_score(y_true, y_pred)
+    recall = recall_score(y_true, y_pred)
+    return {'accuracy': round(acc, 2), 'precision': round(prec, 2), 'recall': round(recall, 2)}
+
+def create_mlflow_experiment(name):
+    try:
+         # Creates a new experiment
+         experiment_id = mlflow.create_experiment(name)
+    except:
+        # Retrieves the experiment id from the already created project
+        experiment_id = mlflow.get_experiment_by_name(name).experiment_id
+
+    return experiment_id
+
+# Hyperopt
+
+def run_hyperopt_experiments(X_train, y_train, X_test, y_test, feature_engineering_step, space):
+        
+    # config logs
+    logging.getLogger().setLevel(logging.INFO)
+    logging.info('***** Step 1: Run Experiments Started *****')
+
+    # silent process
+    import warnings
+    warnings.filterwarnings('ignore') 
     
+    # objective funtion 
+    def objective(args):
+
+        # Initialize model pipeline
+        model = Pipeline(steps=[
+            feature_engineering_step,
+            ('model', args['model']) # args[model] will be sent by fmin from search space
+        ])
+
+        # parameters from pipeline
+        model.set_params(**args['params']['hyper_param_groups'])
+
+        score = cross_val_score(model, X_train, y_train, scoring='f1_weighted' , cv=5, n_jobs=-1, error_score=0)
+        print(f'Model Name: {args["model"]}: ', score)
+
+        # return the negative mean of the eval metric
+        return {
+        'loss': -score.mean(),  
+        'status': STATUS_OK
+    }
+
+    # The Trials object will store details of each iteration
+    trials = Trials()
+
+    # Run the hyperparameter search using the tpe algorithm
+    best = fmin(objective,
+                space,
+                algo=tpe.suggest,
+                max_evals=100,
+                trials=trials)
+        
+    # Get the values of the optimal parameters
+    best_params = space_eval(space, best)
+    
+    print('**** The best parameters are: {} ****'.format(best_params))
+
+    # Initialize best model pipeline
+    model = Pipeline(steps=[
+        feature_engineering_step,
+        ('model', best_params['model']) # args[model] will be sent by fmin from search space
+    ])
+
+    model.set_params(**best_params['params']['hyper_param_groups'])
+
+    # Fit the model with the optimal hyperparamters
+    model.fit(X_train, y_train)
+
+    # Predicting with the best model
+    y_pred_train = model.predict(X_train)
+    y_pred_test = model.predict(X_test)
+
+    # Classification Report 
+    print('Training Classification Report for estimator: ',
+        str(model).split('(')[0])
+    print('\n', classification_report(y_train, y_pred_train))
+    print('\n', classification_report(y_test, y_pred_test))
+
+
+def run_exps_random_search(models, X_train, y_train, pararell_threads):
+        
+    # config logs
+    logging.getLogger().setLevel(logging.INFO)
+    logging.info('***** Step 1: Run Experiments Started *****')
+
+    logging.info("Starting experiment: {}".format(experiment_id))
+    
+    scoring_df = []
+    final_scoring = {}
+
+    # Loop over models configurations
+    for name, model, model_grid in models:
+
+        # Create mlflow experiment with model name
+        experiment_id = create_mlflow_experiment(name)
+
+        with mlflow.start_run(run_name = name, experiment_id=experiment_id):
+            logging.info('Starting Random Search From: %s Model', name)
+            
+            # Initialize random search pipeline
+            clf = RandomizedSearchCV(model, 
+                                    model_grid, 
+                                    random_state=42,cv=5, 
+                                    scoring='accuracy',
+                                    n_jobs=pararell_threads,
+                                    return_train_score=True)
+
+            # Fit random search pipeline
+            search = clf.fit(X_train, y_train)
+
+            # Get best parameters and refit
+            best_params = search.best_params_
+            model.set_params(**best_params)
+            model.fit(X_train, y_train)
+
+            # Get metrics
+            y_true = y_train
+            y_pred = model.predict(X_train)
+            run_metrics = get_metrics(y_true, y_pred)
+
+            # Log metrics and parameters of experiment
+            mlflow.log_metrics(run_metrics)
+            mlflow.log_params(best_params)
+
+            logging.info('Cross Validating: %s Model', name)
+
+            # Train scores
+            final_scoring= cross_validate(model, 
+                X_train, 
+                y_train, 
+                cv=5, 
+                scoring={'accuracy': 'accuracy'},
+                return_train_score=True,
+                verbose = 30,
+                n_jobs= pararell_threads)
+            
+            final_scoring = final_scoring
+            
+            # Get all models train scores
+            this_df = pd.DataFrame(final_scoring).round(4)
+            this_df['model'] = name
+            scoring_df.append(this_df)
+            train_final_score = pd.concat(scoring_df, ignore_index=True)
+            mlflow.end_run()
+
+        logging.info('***** Step 1: Run Experiments Finished *****')
+            
+        return train_final_score
